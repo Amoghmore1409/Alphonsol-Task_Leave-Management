@@ -4,60 +4,169 @@ import bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  const passwordHash = await bcrypt.hash('password123', 12);
+  console.log('Seeding database...');
 
+  // Create departments (without manager first, set manager after users are created)
   const engineering = await prisma.department.upsert({
     where: { name: 'Engineering' },
-    create: { name: 'Engineering', description: 'Software development team' },
     update: {},
+    create: { name: 'Engineering', description: 'Software engineering and development' },
   });
 
   const hrDept = await prisma.department.upsert({
-    where: { name: 'Human Resources' },
-    create: { name: 'Human Resources', description: 'HR team' },
+    where: { name: 'HR Department' },
     update: {},
+    create: { name: 'HR Department', description: 'Human resources and people operations' },
   });
 
+  const year = 2026;
+
+  // Admin
+  const adminHash = await bcrypt.hash('Admin@123', 10);
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@alphonsol.com' },
-    create: { email: 'admin@alphonsol.com', passwordHash, firstName: 'Alice', lastName: 'Admin', role: 'ADMIN' },
+    where: { email: 'admin@company.com' },
     update: {},
+    create: {
+      email: 'admin@company.com',
+      passwordHash: adminHash,
+      firstName: 'System',
+      lastName: 'Admin',
+      role: 'ADMIN',
+      isActive: true,
+    },
   });
 
-  const manager = await prisma.user.upsert({
-    where: { email: 'manager@alphonsol.com' },
-    create: { email: 'manager@alphonsol.com', passwordHash, firstName: 'Mark', lastName: 'Manager', role: 'MANAGER', departmentId: engineering.id },
-    update: {},
-  });
-
+  // HR user
+  const hrHash = await bcrypt.hash('Hr@123', 10);
   const hrUser = await prisma.user.upsert({
-    where: { email: 'hr@alphonsol.com' },
-    create: { email: 'hr@alphonsol.com', passwordHash, firstName: 'Hannah', lastName: 'HR', role: 'HR', departmentId: hrDept.id },
+    where: { email: 'hr@company.com' },
     update: {},
+    create: {
+      email: 'hr@company.com',
+      passwordHash: hrHash,
+      firstName: 'HR',
+      lastName: 'Manager',
+      role: 'HR',
+      isActive: true,
+      departmentId: hrDept.id,
+      leaveBalances: {
+        create: [
+          { leaveType: 'ANNUAL', year, totalDays: 15 },
+          { leaveType: 'SICK', year, totalDays: 10 },
+          { leaveType: 'CASUAL', year, totalDays: 5 },
+        ],
+      },
+    },
   });
 
-  const employee = await prisma.user.upsert({
-    where: { email: 'employee@alphonsol.com' },
-    create: { email: 'employee@alphonsol.com', passwordHash, firstName: 'Eve', lastName: 'Employee', role: 'EMPLOYEE', departmentId: engineering.id },
+  // Manager
+  const managerHash = await bcrypt.hash('Manager@123', 10);
+  const manager = await prisma.user.upsert({
+    where: { email: 'manager@company.com' },
     update: {},
+    create: {
+      email: 'manager@company.com',
+      passwordHash: managerHash,
+      firstName: 'Engineering',
+      lastName: 'Manager',
+      role: 'MANAGER',
+      isActive: true,
+      departmentId: engineering.id,
+      leaveBalances: {
+        create: [
+          { leaveType: 'ANNUAL', year, totalDays: 15 },
+          { leaveType: 'SICK', year, totalDays: 10 },
+          { leaveType: 'CASUAL', year, totalDays: 5 },
+        ],
+      },
+    },
   });
 
-  await prisma.department.update({ where: { id: engineering.id }, data: { managerId: manager.id } });
-  await prisma.department.update({ where: { id: hrDept.id }, data: { managerId: hrUser.id } });
+  // Set Engineering manager
+  await prisma.department.update({
+    where: { id: engineering.id },
+    data: { managerId: manager.id },
+  });
 
-  const year = new Date().getFullYear();
-  const leaveAllocations: Array<['ANNUAL' | 'SICK' | 'CASUAL', number]> = [['ANNUAL', 20], ['SICK', 10], ['CASUAL', 5]];
-  for (const user of [admin, manager, hrUser, employee]) {
-    for (const [leaveType, totalDays] of leaveAllocations) {
-      await prisma.leaveBalance.upsert({
-        where: { userId_leaveType_year: { userId: user.id, leaveType, year } },
-        create: { userId: user.id, leaveType, year, totalDays },
-        update: {},
-      });
-    }
-  }
+  // Employees (shared hash)
+  const empHash = await bcrypt.hash('Employee@123', 10);
 
-  console.log('Seed complete:', { admin: admin.email, manager: manager.email, hr: hrUser.email, employee: employee.email });
+  const emp1 = await prisma.user.upsert({
+    where: { email: 'emp1@company.com' },
+    update: {},
+    create: {
+      email: 'emp1@company.com',
+      passwordHash: empHash,
+      firstName: 'Alice',
+      lastName: 'Johnson',
+      role: 'EMPLOYEE',
+      isActive: true,
+      departmentId: engineering.id,
+      leaveBalances: {
+        create: [
+          { leaveType: 'ANNUAL', year, totalDays: 15 },
+          { leaveType: 'SICK', year, totalDays: 10 },
+          { leaveType: 'CASUAL', year, totalDays: 5 },
+        ],
+      },
+    },
+  });
+
+  const emp2 = await prisma.user.upsert({
+    where: { email: 'emp2@company.com' },
+    update: {},
+    create: {
+      email: 'emp2@company.com',
+      passwordHash: empHash,
+      firstName: 'Bob',
+      lastName: 'Smith',
+      role: 'EMPLOYEE',
+      isActive: true,
+      departmentId: engineering.id,
+      leaveBalances: {
+        create: [
+          { leaveType: 'ANNUAL', year, totalDays: 15 },
+          { leaveType: 'SICK', year, totalDays: 10 },
+          { leaveType: 'CASUAL', year, totalDays: 5 },
+        ],
+      },
+    },
+  });
+
+  const emp3 = await prisma.user.upsert({
+    where: { email: 'emp3@company.com' },
+    update: {},
+    create: {
+      email: 'emp3@company.com',
+      passwordHash: empHash,
+      firstName: 'Carol',
+      lastName: 'Williams',
+      role: 'EMPLOYEE',
+      isActive: true,
+      departmentId: engineering.id,
+      leaveBalances: {
+        create: [
+          { leaveType: 'ANNUAL', year, totalDays: 15 },
+          { leaveType: 'SICK', year, totalDays: 10 },
+          { leaveType: 'CASUAL', year, totalDays: 5 },
+        ],
+      },
+    },
+  });
+
+  console.log('Seed complete:');
+  console.log('  Departments:', engineering.name, ',', hrDept.name);
+  console.log('  Admin:', admin.email);
+  console.log('  HR:', hrUser.email);
+  console.log('  Manager:', manager.email);
+  console.log('  Employees:', emp1.email, ',', emp2.email, ',', emp3.email);
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect());
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

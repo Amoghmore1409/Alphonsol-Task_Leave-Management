@@ -4,7 +4,7 @@
     "module": "CommonJS",
     "moduleResolution": "node",
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": "..",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -13,6 +13,6 @@
       "@alphonsol/shared": ["../packages/shared/src/index.ts"]
     }
   },
-  "include": ["src", "prisma"],
+  "include": ["src", "../packages/shared/src"],
   "exclude": ["node_modules", "dist"]
 }
