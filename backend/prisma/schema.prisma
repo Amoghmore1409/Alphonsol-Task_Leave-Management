@@ -1,0 +1,239 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  HR
+  EMPLOYEE
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  CASUAL
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  BLOCKED
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model Department {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  manager     User?     @relation("DepartmentManager", fields: [managerId], references: [id])
+  managerId   String?
+
+  employees   User[]    @relation("DepartmentEmployees")
+
+  @@map("departments")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  passwordHash   String
+  firstName      String
+  lastName       String
+  role           Role      @default(EMPLOYEE)
+  isActive       Boolean   @default(true)
+  avatarUrl      String?
+  phone          String?
+  joinedAt       DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  department         Department?  @relation("DepartmentEmployees", fields: [departmentId], references: [id])
+  departmentId       String?
+
+  managedDepartments Department[] @relation("DepartmentManager")
+  refreshTokens      RefreshToken[]
+  leaveRequests      LeaveRequest[]  @relation("EmployeeLeaveRequests")
+  reviewedLeaves     LeaveRequest[]  @relation("ReviewerLeaveRequests")
+  leaveBalances      LeaveBalance[]
+  createdTasks       Task[]          @relation("TaskCreator")
+  assignedTasks      TaskAssignee[]
+  taskComments       TaskComment[]
+  taskHistory        TaskHistory[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String    @id @default(cuid())
+  token       String    @unique
+  userId      String
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model LeavePolicy {
+  id                 String    @id @default(cuid())
+  leaveType          LeaveType
+  daysAllowedPerYear Int
+  carryForwardDays   Int       @default(0)
+  maxConsecutiveDays Int?
+  requiresApproval   Boolean   @default(true)
+  effectiveYear      Int
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([leaveType, effectiveYear])
+  @@map("leave_policies")
+}
+
+model LeaveBalance {
+  id             String    @id @default(cuid())
+  userId         String
+  leaveType      LeaveType
+  year           Int
+  totalDays      Int
+  usedDays       Int       @default(0)
+  pendingDays    Int       @default(0)
+  carriedForward Int       @default(0)
+  updatedAt      DateTime  @updatedAt
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leaveType, year])
+  @@index([userId])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id              String      @id @default(cuid())
+  employeeId      String
+  leaveType       LeaveType
+  startDate       DateTime
+  endDate         DateTime
+  totalDays       Int
+  reason          String
+  status          LeaveStatus @default(PENDING)
+  reviewerId      String?
+  reviewedAt      DateTime?
+  reviewerComment String?
+  attachmentUrl   String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  employee        User        @relation("EmployeeLeaveRequests", fields: [employeeId], references: [id])
+  reviewer        User?       @relation("ReviewerLeaveRequests", fields: [reviewerId], references: [id])
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@map("leave_requests")
+}
+
+model Task {
+  id           String       @id @default(cuid())
+  title        String
+  description  String?
+  status       TaskStatus   @default(TODO)
+  priority     TaskPriority @default(MEDIUM)
+  deadline     DateTime?
+  creatorId    String
+  departmentId String?
+  isArchived   Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  creator      User         @relation("TaskCreator", fields: [creatorId], references: [id])
+  assignees    TaskAssignee[]
+  comments     TaskComment[]
+  history      TaskHistory[]
+  tags         TaskTag[]
+
+  @@index([status])
+  @@index([creatorId])
+  @@index([deadline])
+  @@map("tasks")
+}
+
+model TaskAssignee {
+  taskId     String
+  userId     String
+  assignedAt DateTime @default(now())
+
+  task       Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@map("task_assignees")
+}
+
+model TaskComment {
+  id        String    @id @default(cuid())
+  taskId    String
+  authorId  String
+  body      String
+  editedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
+
+  @@index([taskId])
+  @@map("task_comments")
+}
+
+model TaskHistory {
+  id        String   @id @default(cuid())
+  taskId    String
+  actorId   String
+  field     String
+  oldValue  String?
+  newValue  String?
+  changedAt DateTime @default(now())
+
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  actor     User     @relation(fields: [actorId], references: [id])
+
+  @@index([taskId])
+  @@map("task_history")
+}
+
+model TaskTag {
+  id     String @id @default(cuid())
+  taskId String
+  label  String
+  color  String @default("#6366f1")
+
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_tags")
+}
